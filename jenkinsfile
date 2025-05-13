@@ -1,0 +1,71 @@
+pipeline {
+  agent any
+
+  environment {
+    // The Jenkins credential ID that holds your Docker Hub creds
+    DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials2'
+    // Your Docker Hub image name
+    DOCKER_IMAGE           = 'hamzah64/ml-ops-final-proj'
+    IMAGE_TAG              = 'latest'
+  }
+
+  triggers {
+    // React to GitHub push & PR webhooks
+    githubPush()
+    // Fallback SCM polling every 5 minutes
+    pollSCM('H/5 * * * *')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Fetch Data') {
+      steps {
+        script {
+          if (isUnix()) {
+            sh 'python3 -m pip install --upgrade pip'
+            sh 'python3 -m pip install -r requirements.txt dvc'
+            sh 'dvc pull'
+          } else {
+            bat 'python -m pip install --upgrade pip'
+            bat 'python -m pip install -r requirements.txt dvc'
+            bat 'python -m dvc pull'
+          }
+        }
+      }
+    }
+
+    stage('Build & Tag Docker Image') {
+      steps {
+        script {
+          // Builds: hamzah64/ml-ops-final-proj:latest
+          docker.build("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}")
+        }
+      }
+    }
+
+    stage('Push to Docker Hub') {
+      steps {
+        // This uses the Docker Pipeline plugin to log in and push
+        script {
+          docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_HUB_CREDENTIALS) {
+            docker.image("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}").push()
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Docker image ${env.DOCKER_IMAGE}:${env.IMAGE_TAG} built & pushed successfully"
+    }
+    failure {
+      echo "❌ Pipeline failed"
+    }
+  }
+}
