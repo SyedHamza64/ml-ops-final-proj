@@ -2,33 +2,41 @@ pipeline {
   agent any
 
   environment {
-    // The Jenkins credential ID that holds your Docker Hub creds
-    DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials2'
-    // Your Docker Hub image name
+    DOCKER_HUB_CREDENTIALS = 'dockerhub-final-proj'  // whatever ID you chose
     DOCKER_IMAGE           = 'hamzah64/ml-ops-final-proj'
     IMAGE_TAG              = 'latest'
   }
 
   triggers {
-    // React to GitHub push & PR webhooks
-    githubPush()
-    // Fallback SCM polling every 5 minutes
+    // Use SCM polling; GitHub hook trigger will enqueue a scan
     pollSCM('H/5 * * * *')
   }
 
   stages {
-    stage('Checkout') {
+    stage('Validate PR Target') {
+      when {
+        allOf {
+          expression { env.CHANGE_ID }                // only run on PRs
+          changeRequest target: 'test'               // that target the test branch
+        }
+      }
       steps {
-        checkout scm
+        echo "Building PR #${env.CHANGE_ID} targeting ${env.CHANGE_TARGET}"
       }
     }
 
+    stage('Checkout') {
+      when { changeRequest target: 'test' }
+      steps { checkout scm }
+    }
+
     stage('Fetch Data') {
+      when { changeRequest target: 'test' }
       steps {
         script {
           if (isUnix()) {
-            sh 'python3 -m pip install --upgrade pip'
-            sh 'python3 -m pip install -r requirements.txt dvc'
+            sh 'pip3 install --upgrade pip'
+            sh 'pip3 install -r requirements.txt dvc'
             sh 'dvc pull'
           } else {
             bat 'python -m pip install --upgrade pip'
@@ -39,22 +47,27 @@ pipeline {
       }
     }
 
-    stage('Build & Tag Docker Image') {
+    stage('Build Docker Image') {
+      when { changeRequest target: 'test' }
       steps {
         script {
-          // Builds: hamzah64/ml-ops-final-proj:latest
-          docker.build("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}")
+          docker.build("${DOCKER_IMAGE}:${IMAGE_TAG}")
         }
       }
     }
 
     stage('Push to Docker Hub') {
+      when { changeRequest target: 'test' }
       steps {
-        // This uses the Docker Pipeline plugin to log in and push
-        script {
-          docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_HUB_CREDENTIALS) {
-            docker.image("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}").push()
-          }
+        withCredentials([usernamePassword(
+          credentialsId: env.DOCKER_HUB_CREDENTIALS,
+          usernameVariable: 'DOCKERHUB_USER',
+          passwordVariable: 'DOCKERHUB_PASS'
+        )]) {
+          sh """
+            docker login -u $DOCKERHUB_USER -p $DOCKERHUB_PASS
+            docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+          """
         }
       }
     }
@@ -62,10 +75,10 @@ pipeline {
 
   post {
     success {
-      echo "✅ Docker image ${env.DOCKER_IMAGE}:${env.IMAGE_TAG} built & pushed successfully"
+      echo "✅ PR built & image pushed: ${DOCKER_IMAGE}:${IMAGE_TAG}"
     }
     failure {
-      echo "❌ Pipeline failed"
+      echo "❌ Pipeline failed for PR #${env.CHANGE_ID}"
     }
   }
 }
