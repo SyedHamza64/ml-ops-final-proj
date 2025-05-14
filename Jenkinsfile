@@ -8,32 +8,14 @@ pipeline {
   }
 
   triggers {
-    // React to GitHub push & PR webhooks
-    githubPush()
-    // Fallback SCM polling every 5 minutes
-    pollSCM('H/5 * * * *')
+    githubPush()           // GitHub webhooks
+    pollSCM('H/5 * * * *') // fallback polling
   }
 
   stages {
     stage('Checkout') {
       steps {
         checkout scm
-      }
-    }
-
-    stage('Fetch Data') {
-      steps {
-        script {
-          if (isUnix()) {
-            sh 'python3 -m pip install --upgrade pip'
-            sh 'python3 -m pip install -r requirements.txt dvc'
-            sh 'dvc pull'
-          } else {
-            bat 'python -m pip install --upgrade pip'
-            bat 'python -m pip install -r requirements.txt dvc'
-            bat 'python -m dvc pull'
-          }
-        }
       }
     }
 
