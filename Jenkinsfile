@@ -8,30 +8,20 @@ pipeline {
   }
 
   triggers {
-    githubPush()           // React to GitHub push & PR webhooks
-    pollSCM('H/5 * * * *') // Fallback polling every 5 minutes
+    // React to GitHub push & PR webhooks
+    githubPush()
+    // Fallback SCM polling every 5 minutes
+    pollSCM('H/5 * * * *')
   }
 
   stages {
     stage('Checkout') {
-      when {
-        anyOf {
-          branch 'dev'
-          changeRequest target: 'test'
-        }
-      }
       steps {
         checkout scm
       }
     }
 
     stage('Fetch Data') {
-      when {
-        anyOf {
-          branch 'dev'
-          changeRequest target: 'test'
-        }
-      }
       steps {
         script {
           if (isUnix()) {
@@ -48,12 +38,6 @@ pipeline {
     }
 
     stage('Build Docker Image') {
-      when {
-        anyOf {
-          branch 'dev'
-          changeRequest target: 'test'
-        }
-      }
       steps {
         script {
           docker.build("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}")
@@ -62,12 +46,6 @@ pipeline {
     }
 
     stage('Push to Docker Hub') {
-      when {
-        anyOf {
-          branch 'dev'
-          changeRequest target: 'test'
-        }
-      }
       steps {
         withCredentials([usernamePassword(
           credentialsId: env.DOCKER_HUB_CREDENTIALS,
