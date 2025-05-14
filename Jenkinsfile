@@ -1,15 +1,17 @@
 pipeline {
   agent any
-// hi
+
   environment {
+    // The Jenkins credential ID you stored for Docker Hub
     DOCKER_HUB_CREDENTIALS = 'dockerhub-final-proj'
+    // Your Docker Hub repo
     DOCKER_IMAGE           = 'hamzah64/ml-ops-final-proj'
     IMAGE_TAG              = 'latest'
   }
 
   triggers {
-    githubPush()           // GitHub webhooks
-    pollSCM('H/5 * * * *') // fallback polling
+    githubPush()
+    pollSCM('H/5 * * * *')
   }
 
   stages {
@@ -19,25 +21,17 @@ pipeline {
       }
     }
 
-    stage('Build Docker Image') {
+    stage('Build & Push Docker Image') {
       steps {
         script {
-          docker.build("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}")
-        }
-      }
-    }
-
-    stage('Push to Docker Hub') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: env.DOCKER_HUB_CREDENTIALS,
-          usernameVariable: 'DOCKERHUB_USER',
-          passwordVariable: 'DOCKERHUB_PASS'
-        )]) {
-          sh """
-            docker login -u $DOCKERHUB_USER -p $DOCKERHUB_PASS
-            docker push ${env.DOCKER_IMAGE}:${env.IMAGE_TAG}
-          """
+          docker.withRegistry('https://index.docker.io/v1/', DOCKER_HUB_CREDENTIALS) {
+            // This block logs in, then:
+            // 1) pulls base images
+            // 2) builds your image
+            // 3) pushes it to Docker Hub
+            def img = docker.build("${DOCKER_IMAGE}:${IMAGE_TAG}")
+            img.push()
+          }
         }
       }
     }
