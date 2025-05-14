@@ -2,41 +2,36 @@ pipeline {
   agent any
 
   environment {
-    // The Jenkins credential ID you stored for Docker Hub
     DOCKER_HUB_CREDENTIALS = 'dockerhub-final-proj'
-    // Your Docker Hub repo
     DOCKER_IMAGE           = 'hamzah64/ml-ops-final-proj'
     IMAGE_TAG              = 'latest'
   }
 
-  // We'll rely on GitHub webhooks + GitHub hook trigger for SCM polling
   triggers {
-    pollSCM('H/5 * * * *')
+    githubPush()           // React to GitHub push & PR webhooks
+    pollSCM('H/5 * * * *') // Fallback polling every 5 minutes
   }
 
   stages {
-    stage('Validate PR Target') {
-      // Only run on Pull Requests into "test"
+    stage('Checkout') {
       when {
-        allOf {
-          expression { env.CHANGE_ID }          // it is a PR
-          changeRequest target: 'test'         // target branch is 'test'
+        anyOf {
+          branch 'dev'
+          changeRequest target: 'test'
         }
       }
-      steps {
-        echo "🔍 Detected PR #${env.CHANGE_ID} → ${env.CHANGE_TARGET}"
-      }
-    }
-
-    stage('Checkout') {
-      when { changeRequest target: 'test' }
       steps {
         checkout scm
       }
     }
 
     stage('Fetch Data') {
-      when { changeRequest target: 'test' }
+      when {
+        anyOf {
+          branch 'dev'
+          changeRequest target: 'test'
+        }
+      }
       steps {
         script {
           if (isUnix()) {
@@ -53,7 +48,12 @@ pipeline {
     }
 
     stage('Build Docker Image') {
-      when { changeRequest target: 'test' }
+      when {
+        anyOf {
+          branch 'dev'
+          changeRequest target: 'test'
+        }
+      }
       steps {
         script {
           docker.build("${env.DOCKER_IMAGE}:${env.IMAGE_TAG}")
@@ -62,9 +62,13 @@ pipeline {
     }
 
     stage('Push to Docker Hub') {
-      when { changeRequest target: 'test' }
+      when {
+        anyOf {
+          branch 'dev'
+          changeRequest target: 'test'
+        }
+      }
       steps {
-        // Inject your Docker Hub creds and push
         withCredentials([usernamePassword(
           credentialsId: env.DOCKER_HUB_CREDENTIALS,
           usernameVariable: 'DOCKERHUB_USER',
@@ -81,10 +85,10 @@ pipeline {
 
   post {
     success {
-      echo "✅ PR #${env.CHANGE_ID} built & Docker image pushed successfully"
+      echo "✅ Image ${env.DOCKER_IMAGE}:${env.IMAGE_TAG} built & pushed."
     }
     failure {
-      echo "❌ PR #${env.CHANGE_ID} build failed"
+      echo "❌ Build failed."
     }
   }
 }
