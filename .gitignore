@@ -1,0 +1,10 @@
+# DVC data files
+data/*.csv
+
+# DVC cache
+/.dvc/cache
+
+# mlruns folder (MLflow)
+mlruns/
+
+# Other artifacts you don’t want in Git
